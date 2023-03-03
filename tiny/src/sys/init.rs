@@ -76,15 +76,18 @@ impl Init {
                 "-r" => {
                     conf_found = true;
                     match args.next() {
-                        Some(p) => conf = match read_to_string(&p) {
-                            Ok(s) => {
-                                conf_file = p;
-                                Some(s)
-                            },
-                            Err(e) => {
-                                Log::push_stop(log, 14, Some(format!("{}. Error: {}", &p, e.to_string())));
-                                return None;
-                            },
+                        Some(p) => conf = {
+                            let file = format!("{}/tiny.conf", p);
+                            match read_to_string(&file) {
+                                Ok(s) => {
+                                    conf_file = file;
+                                    Some(s)
+                                },
+                                Err(e) => {
+                                    Log::push_stop(log, 14, Some(format!("{}. Error: {}", &p, e.to_string())));
+                                    return None;
+                                },
+                            }
                         },
                         None => {
                             Log::push_stop(log, 13, None);
@@ -102,15 +105,18 @@ impl Init {
             conf = match args.next() {
                 Some(c) => if c.as_str() == "-r" {
                     match args.next() {
-                        Some(p) => match read_to_string(&p) {
-                            Ok(s) => {
-                                conf_file = p;
-                                Some(s)
-                            },
-                            Err(e) => {
-                                Log::push_stop(log, 14, Some(format!("{}. Error: {}", &p, e.to_string())));
-                                return None;
-                            },
+                        Some(p) => {
+                            let file = format!("{}/tiny.conf", p);
+                            match read_to_string(&file) {
+                                Ok(s) => {
+                                    conf_file = file;
+                                    Some(s)
+                                },
+                                Err(e) => {
+                                    Log::push_stop(log, 14, Some(format!("{}. Error: {}", &p, e.to_string())));
+                                    return None;
+                                },
+                            }
                         },
                         None => {
                             Log::push_stop(log, 13, None);

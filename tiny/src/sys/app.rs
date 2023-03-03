@@ -100,16 +100,16 @@ impl App {
 
     #[cfg(not(target_family="windows"))]
     fn start(app: App) {
-        let path = &app.init.path;
-        let exe = &app.init.exe;
+        let path = &app.init.exe_path;
+        let exe = &app.init.exe_file;
 
-        let args = vec!["go", "-r", &app.init.conf_path];
+        let args = vec!["go", "-r", &app.init.root_path];
         match Command::new(&exe).args(&args[..]).current_dir(&path).spawn() {
             Ok(c) => {
-                Log::push(app.log, LogView::Error, 211, Some(format!("{} go. PID: {}", &exe, c.id())));
+                Log::push_info(app.log, 211, Some(format!("{} {}. PID: {}", &exe, args.join(" "), c.id())));
             },
             Err(e) => {
-                Log::push(app.log, LogView::Error, 212, Some(format!("{} go. Error: {}", &exe, e.to_string())));
+                Log::push_stop(app.log, 212, Some(format!("{} {}. Error: {}", &exe, args.join(" "), e.to_string())));
             },
         };
     }
