@@ -1,5 +1,5 @@
 # tiny
-"tiny" is a small web framework that allows you to write a Laravel-style frontend in Rust language.
+**tiny** is a small web framework that allows you to write a Laravel-style frontend in Rust language.
 
 Demo: [https://tiny.com.ua/](https://tiny.com.ua) 
 
@@ -35,6 +35,10 @@ cargo build --release
 ```
 
 ## Installation
+
+### Database
+**tiny** uses a postgres 12+ database.
+To create the database schema and initial data, run install.sql in the database console.
 
 ### For windows
 
