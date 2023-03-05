@@ -516,7 +516,6 @@ impl<'a> Action<'a> {
     }
 
     pub fn get_access(&mut self, module: &str, class: &str, action: &str) -> bool {
-        println!("Get access mod={} cls={} act={}", module, class, action);
         if module == "index" && class == "index" && action == "err" {
             return true;
         }
@@ -559,7 +558,6 @@ impl<'a> Action<'a> {
                 self.session.lang_id = lang_id;
             }
         }
-        println!("==============================================");
         self.start_route(&module, &class, &action, param, false)
     }
 
