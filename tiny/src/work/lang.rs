@@ -6,7 +6,7 @@ use super::db::{DBConfig, DB};
 
 #[derive(Debug, Clone)]
 pub struct LangItem{
-    pub id: u8,
+    pub id: u64,
     pub code: String,   //ISO 3166 alpha-2: ua - Ukraine,     us - USA,       gb - United Kingdom
     pub lang: String,   //ISO 639-1       : uk - ukrainian,   en - english,   en - english
     pub name: String,
@@ -15,11 +15,11 @@ pub struct LangItem{
 #[derive(Debug, Clone)]
 pub struct Lang {
     pub langs: Vec<LangItem>,
-    list: HashMap<u8, HashMap<String, HashMap<String, HashMap<String, String>>>>, // lang_id => module => class => text = translate
+    list: HashMap<u64, HashMap<String, HashMap<String, HashMap<String, String>>>>, // lang_id => module => class => text = translate
 }
 
 impl Lang {
-    pub fn get<'a>(&self, id: u8, module: &str, class: &str) -> Option<&HashMap<String, String>> {
+    pub fn get<'a>(&self, id: u64, module: &str, class: &str) -> Option<&HashMap<String, String>> {
         if let Some(i) = self.list.get(&id) {
             if let Some(c) = i.get(module) {
                 if let Some(v) = c.get(class) {
@@ -59,7 +59,7 @@ impl Lang {
         let mut ids = HashMap::with_capacity(res.len());
         
         for row in res {
-            let id = match u8::try_from(row.get::<usize, i64>(0)) {
+            let id = match u64::try_from(row.get::<usize, i64>(0)) {
                 Ok(i) => i,
                 Err(_) => {
                     Log::push_warning(log, 1152, None);
@@ -80,7 +80,7 @@ impl Lang {
         }
 
         let path = format!("{}/app/", root);
-        let mut list: HashMap<u8, HashMap<String, HashMap<String, HashMap<String, String>>>> = HashMap::new();
+        let mut list: HashMap<u64, HashMap<String, HashMap<String, HashMap<String, String>>>> = HashMap::new();
         match read_dir(path) {
             Ok(r) => {
                 for entry in r {

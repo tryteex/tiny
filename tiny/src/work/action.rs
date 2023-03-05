@@ -27,8 +27,7 @@ pub enum Data {
 
 enum Route {
     Redirect,
-    Err,
-    Ok(String, String, String, Option<String>, Option<u8>),
+    Ok(String, String, String, Option<String>, Option<u64>),
 }
 
 pub struct DataRun<'a> {
@@ -36,7 +35,7 @@ pub struct DataRun<'a> {
     pub html: &'a Html,
     pub lang: &'a Lang,
     pub salt: &'a str,
-    pub lang_id: u8,
+    pub lang_id: u64,
     pub path: &'a str,
     pub db: &'a mut DB,
     pub engine: &'a ActMap,
@@ -96,7 +95,7 @@ pub struct Response {
 #[derive(Debug)]
 pub struct Session<'a> {
     id: i64,                              // session_id from database
-    pub lang_id: u8,
+    pub lang_id: u64,
     pub user_id: i64,                         // user_id from database
     pub role_id: i64,                         // role_id from database
     pub key: &'a str,                           // cookie key
@@ -119,8 +118,8 @@ pub struct Action<'a> {
     engine: &'a ActMap,
     template: &'a Html,
     pub language: &'a Lang,
-    current_module: String,
-    current_class: String,
+    current_module: Option<String>,
+    current_class: Option<String>,
     pub html: Option<&'a HashMap<String, Vec<Node>>>,
     lang: Option<&'a HashMap<String, String>>,
     pub internal: bool,
@@ -368,17 +367,17 @@ impl<'a> Action<'a> {
             session_role_id = rid;
             session_data = sdata;
             session_lang_id = match session_data.entry("lang_id".to_owned()) {
-                Entry::Occupied(mut o) => if let Data::U8(lang_id) = o.get() {
+                Entry::Occupied(mut o) => if let Data::U64(lang_id) = o.get() {
                     session_change = false;
                     *lang_id
                 } else {
                     session_change = true;
-                    *o.get_mut() = Data::U8(data.lang_id);
+                    *o.get_mut() = Data::U64(data.lang_id);
                     data.lang_id
                 },
                 Entry::Vacant(v) => {
                     session_change = true;
-                    v.insert(Data::U8(data.lang_id));
+                    v.insert(Data::U64(data.lang_id));
                     data.lang_id
                 },
             };
@@ -442,8 +441,8 @@ impl<'a> Action<'a> {
             class: None,
             action: None,
             engine: data.engine,
-            current_module: "".to_owned(),
-            current_class: "".to_owned(),
+            current_module: None,
+            current_class: None,
             template: data.html,
             language: data.lang,
             html: None,
@@ -517,6 +516,7 @@ impl<'a> Action<'a> {
     }
 
     pub fn get_access(&mut self, module: &str, class: &str, action: &str) -> bool {
+        println!("Get access mod={} cls={} act={}", module, class, action);
         if module == "index" && class == "index" && action == "err" {
             return true;
         }
@@ -547,7 +547,6 @@ impl<'a> Action<'a> {
 
         let (module, class, action, param, lang_id) = match self.extract_route() {
             Route::Redirect => return Answer::None,
-            Route::Err => ("index".to_owned(), "index".to_owned(), "err".to_owned(), None, None),
             Route::Ok(m, c, a, p, l) => (m, c, a, p, l),
         };
         self.module = Some(module.clone());
@@ -556,10 +555,11 @@ impl<'a> Action<'a> {
         if let Some(lang_id) = lang_id {
             if self.session.lang_id != lang_id {
                 self.session.change = true;
-                self.session.data.insert("lang_id".to_owned(), Data::U8(lang_id));
+                self.session.data.insert("lang_id".to_owned(), Data::U64(lang_id));
                 self.session.lang_id = lang_id;
             }
         }
+        println!("==============================================");
         self.start_route(&module, &class, &action, param, false)
     }
 
@@ -576,11 +576,27 @@ impl<'a> Action<'a> {
          Answer::None
     }
 
+    fn compare(&self, module: &str, class: &str) -> bool {
+        match &self.current_module {
+            Some(m) => if m != module {
+                return false;
+            },
+            None => return false,
+        };
+        match &self.current_class {
+            Some(c) => if c != class {
+                return false;
+            },
+            None => return false,
+        };
+        true
+    }
+
     fn invoke(&mut self, module: &str, class: &str, action: &str, param: Option<String>, internal: bool) -> Answer {
         if let Some(m) = &self.engine.get(module) {
             if let Some(c) = m.get(class) {
                 if let Some(a) = c.get(action) {
-                    if &self.current_module == module && &self.current_class == class {
+                    if self.compare(module, class) {
                         let i = self.internal;
                         let p = match param {
                             Some(str) => self.param.replace(str),
@@ -592,8 +608,6 @@ impl<'a> Action<'a> {
                         self.param = p;
                         return res;
                     } else {
-                        self.current_module = module.to_owned();
-                        self.current_class = class.to_owned();
                         let h = self.html;
                         let l = self.lang;
                         let i = self.internal;
@@ -601,10 +615,14 @@ impl<'a> Action<'a> {
                             Some(str) => self.param.replace(str),
                             None => self.param.take(),
                         };
+                        let m = self.current_module.replace(module.to_owned());
+                        let c = self.current_class.replace(class.to_owned());
                         self.html = self.template.get(module, class);
                         self.lang = self.language.get(self.session.lang_id, module, class);
                         self.internal = internal;
                         let res = a(self);
+                        self.current_module = m;
+                        self.current_class = c;
                         self.html = h;
                         self.lang = l;
                         self.internal = i;
@@ -618,11 +636,19 @@ impl<'a> Action<'a> {
     }
 
     // Load internal controller
-    pub fn load(&mut self, module: &str, class: &str, action: &str, param: Option<String>) -> Answer {
+    pub fn load_raw(&mut self, module: &str, class: &str, action: &str, param: Option<String>) -> Answer {
         self.start_route(module, class, action, param, true)
     }
 
+    // Load internal controller and set value
+    pub fn load(&mut self, key: &'a str, module: &str, class: &str, action: &str, param: Option<String>) {
+        if let Answer::String(str) = self.start_route(module, class, action, param, true) {
+            self.data.insert(key, Data::String(str));
+        }
+    }
+
     fn extract_route(&mut self) -> Route {
+
         // Get redirect
         let key = format!("redirect:{}", &self.request.url);
         if let Some(data) = Cache::get(Arc::clone(&self.cache), &key, Arc::clone(&self.log)) {
@@ -631,25 +657,6 @@ impl<'a> Action<'a> {
                 self.response.redirect = Some(Redirect { url: r[1..].to_owned(), permanently});
                 return Route::Redirect;
             }
-        } else {
-            let res = match self.db.query_fast(4, &[&self.request.url]) {
-                Some(r) => r,
-                None => return Route::Err,
-            };
-            if res.len() == 1 {
-                let row = &res[0];
-                let redirect: String = row.get(0);
-                let permanently: bool = row.get(1);
-                let value = if permanently {
-                    format!("1{}", &redirect)
-                } else {
-                    format!("0{}", &redirect)
-                };
-                self.response.redirect = Some(Redirect { url: redirect, permanently});
-                Cache::set(Arc::clone(&self.cache), key, Data::String(value), Arc::clone(&self.log));
-                return Route::Redirect;
-            }
-            Cache::set(Arc::clone(&self.cache), key.clone(), Data::None, Arc::clone(&self.log));
         }
     
         // Get route
@@ -659,60 +666,45 @@ impl<'a> Action<'a> {
                 if let Data::String(module) = &r[0] {
                     if let Data::String(class) = &r[1] {
                         if let Data::String(action) = &r[2] {
-                            if let Data::U8(lang_id) = &r[4] {
-                                if let Data::String(param) = &r[3] {
-                                    return Route::Ok(module.to_owned(), class.to_owned(), action.to_owned(), Some(param.to_owned()), Some(*lang_id));
-                                } else if let Data::None = &r[3] {
-                                    return Route::Ok(module.to_owned(), class.to_owned(), action.to_owned(), None, Some(*lang_id));
-                                }
-                            }
+                            let lang = match &r[4] {
+                                Data::U64(lang_id) => Some(*lang_id),
+                                _ => None,
+                            };
+                            let param = match &r[3] {
+                                Data::String(param) => Some(param.clone()),
+                                _ => None,
+                            };
+                            return Route::Ok(module.to_owned(), class.to_owned(), action.to_owned(), param, lang);
                         }
                     }
                 }
             }
-        } else {
-            let res = match self.db.query_fast(5, &[&self.request.url]) {
-                Some(r) => r,
-                None => return Route::Err,
-            };
-            if res.len() == 1 {
-                let row = &res[0];
-                let module: String = row.get(0);
-                let class: String = row.get(1);
-                let action: String = row.get(2);
-                let param: Option<String> = row.get(3);
-                let lang_id: i64 = row.get(4);
-                let mut data = Vec::with_capacity(5);
-                data.push(Data::String(module.clone()));
-                data.push(Data::String(class.clone()));
-                data.push(Data::String(action.clone()));
-                match &param {
-                    Some(s) => data.push(Data::String(s.clone())),
-                    None => data.push(Data::None),
-                };
-                data.push(Data::U8(lang_id as u8));
-                Cache::set(Arc::clone(&self.cache), key, Data::Vec(data), Arc::clone(&self.log));
-                return Route::Ok(module, class, action, param, Some(lang_id as u8));
-            }
-            Cache::set(Arc::clone(&self.cache), key, Data::None, Arc::clone(&self.log));
         }
 
-        let mut module = "index";
-        let mut class = "index";
-        let mut action = "index";
-        let mut param = None;
+        let module;
+        let class;
+        let action;
+        let param;
         if self.request.url != "/" {
             let load: Vec<&str> = self.request.url.splitn(5, "/").collect();
             match load.len() {
-                2 => module = load[1],
+                2 => {
+                    module = load[1];
+                    class = "index";
+                    action = "index";
+                    param = None;
+                },
                 3 => {
                     module = load[1];
                     class = load[2];
+                    action = "index";
+                    param = None;
                 },
                 4 => {
                     module = load[1];
                     class = load[2];
                     action = load[3];
+                    param = None;
                 },
                 5 => {
                     module = load[1];
@@ -720,8 +712,18 @@ impl<'a> Action<'a> {
                     action = load[3];
                     param = Some(load[4].to_owned());
                 },
-                _ => {}
+                _ => {
+                    module = "index";
+                    class = "index";
+                    action = "index";
+                    param = None;
+                }
             } 
+        } else {
+            module = "index";
+            class = "index";
+            action = "index";
+            param = None;
         }
         Route::Ok(module.to_owned(), class.to_owned(), action.to_owned(), param, None)
     }

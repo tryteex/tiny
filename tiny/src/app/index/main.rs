@@ -12,15 +12,10 @@ pub fn index(this: &mut Action) -> Answer {
     this.data.insert("description", Data::String(this.lang("description")));
     this.data.insert("lang", Data::String(this.language.langs[this.session.lang_id as usize].lang.clone()));
 
-    if let Answer::String(str) = this.load("index", "main", "header", None) {
-        this.data.insert("header", Data::String(str));
-    }
-    if let Answer::String(str) = this.load("index", "main", "footer", None) {
-        this.data.insert("footer", Data::String(str));
-    }
-    if let Answer::String(str) = this.load("index", "main", "sidebar", None) {
-        this.data.insert("sidebar", Data::String(str));
-    }
+    this.load("header", "index", "main", "header", None);
+    this.load("footer", "index", "main", "footer", None);
+    this.load("sidebar", "index", "main", "sidebar", None);
+
     Html::render("index", &this)
 }
 
@@ -37,9 +32,7 @@ pub fn header(this: &mut Action) -> Answer {
         this.response.redirect = Some(Redirect { url: "/".to_owned(), permanently: true });
         return Answer::None;
     }
-    if let Answer::String(str) = this.load("index", "main", "navigation", None) {
-        this.data.insert("navigation", Data::String(str));
-    }
+    this.load("navigation", "index", "main", "navigation", None);
 
     Html::render("header", &this)
 }
@@ -61,7 +54,7 @@ pub fn navigation(this: &mut Action) -> Answer {
     let mut langs = Vec::with_capacity(this.language.langs.len());
     for lang in &this.language.langs {
         let mut map = HashMap::with_capacity(2);
-        map.insert("langs.id".to_owned(), Data::U8(lang.id));
+        map.insert("langs.id".to_owned(), Data::U64(lang.id));
         map.insert("langs.name".to_owned(), Data::String(lang.name.clone()));
         langs.push(Data::Map(map));
     }

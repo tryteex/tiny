@@ -66,7 +66,7 @@ impl Go {
         path: String, 
         db: DBConfig, 
         timezone: String, 
-        lang_id: u8, 
+        lang_id: u64, 
         engine: ActMap
     ) -> (Vec<Worker>, Arc<Mutex<Vec<Sender<MessageWork>>>>, Receiver<u8>) {
         let mut workers = Vec::with_capacity(max as usize);

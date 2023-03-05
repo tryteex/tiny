@@ -6,6 +6,8 @@ use postgres_native_tls::MakeTlsConnector;
 
 use crate::sys::log::Log;
 
+use super::{cache::Cache, action::Data};
+
 #[derive(Debug, Clone)]
 pub struct DBConfig {
     pub host: String,
@@ -28,6 +30,7 @@ pub struct DB {
     log: Arc<Mutex<Log>>,
     timezone: String,
     pub prepare: Vec<(Statement, &'static str)>,
+    cache: Arc<Mutex<Cache>>,
 }
 
 impl fmt::Debug for DB {
@@ -75,8 +78,8 @@ impl DB {
         }
     }
 
-    pub fn new(config: DBConfig, log: Arc<Mutex<Log>>, timezone: String) -> DB {
-        match DB::connect(&config, Arc::clone(&log), &timezone) {
+    pub fn new(config: DBConfig, log: Arc<Mutex<Log>>, timezone: String, cache: Arc<Mutex<Cache>>) -> DB {
+        match DB::connect(&config, Arc::clone(&log), &timezone, Arc::clone(&cache)) {
             Ok((db, prepare)) => {
                 DB {
                     sql: Some(db),
@@ -85,6 +88,7 @@ impl DB {
                     log,
                     timezone,
                     prepare,
+                    cache,
                 }
             },
             Err(e) => {
@@ -96,12 +100,13 @@ impl DB {
                     log,
                     timezone,
                     prepare: Vec::new(),
+                    cache,
                 }
             },
         }
     }
 
-    fn connect(config: &DBConfig, log: Arc<Mutex<Log>>, timezone: &str) -> Result<(Client, Vec<(Statement, &'static str)>), String> {
+    fn connect(config: &DBConfig, log: Arc<Mutex<Log>>, timezone: &str, cache: Arc<Mutex<Cache>>) -> Result<(Client, Vec<(Statement, &'static str)>), String> {
         let connector = match native_tls::TlsConnector::builder().danger_accept_invalid_certs(true).min_protocol_version(Some(Protocol::Tlsv12)).build() {
             Ok(c) => c,
             Err(e) => {
@@ -125,7 +130,7 @@ impl DB {
             Log::push_warning(log, 602, Some(format!("{} error={} {}", query, e.to_string(), timezone)));
             return Err(e.to_string());
         };
-        let prepare = DB::prepare(&mut sql, Arc::clone(&log));
+        let prepare = DB::prepare(&mut sql, Arc::clone(&log), Arc::clone(&cache));
         Ok((sql, prepare))
     }
 
@@ -142,7 +147,7 @@ impl DB {
             None => true,
         };
         if close {
-            match DB::connect(&self.config, Arc::clone(&self.log), &self.timezone) {
+            match DB::connect(&self.config, Arc::clone(&self.log), &self.timezone, Arc::clone(&self.cache)) {
                 Ok((db, prepare)) => {
                     self.sql = Some(db);
                     self.prepare = prepare;
@@ -246,7 +251,7 @@ impl DB {
         }
     }
     
-    fn prepare(db: &mut Client, log: Arc<Mutex<Log>>) -> Vec<(Statement, &'static str)> {
+    fn prepare(db: &mut Client, log: Arc<Mutex<Log>>, cache: Arc<Mutex<Cache>>) -> Vec<(Statement, &'static str)> {
         let mut vec = Vec::with_capacity(64);
         // 0 Get / Insert session
         let sql = "
@@ -333,34 +338,73 @@ impl DB {
             Err(e) => Log::push_error(log, 604, Some(e.to_string())),
         };
 
-        // 4 Redirect
-        let sql = "
-            SELECT redirect, permanently
-            FROM redirect
-            WHERE url=$1
-        ";
-        match db.prepare_typed(sql, &[Type::TEXT]) {
-            Ok(s) => {
-                vec.push((s, sql));
-            },
-            Err(e) => Log::push_error(log, 604, Some(e.to_string())),
-        };
-
-        // 5 Route
-        let sql = "
-            SELECT c.module, c.class, c.action, r.params, r.lang_id
-            FROM route r INNER JOIN controller c ON r.controller_id=c.controller_id
-            WHERE 
-            r.url=$1 AND LENGTH(c.module)>0 AND LENGTH(c.class)>0 AND LENGTH(c.action)>0
-        ";
-        match db.prepare_typed(sql, &[Type::TEXT]) {
-            Ok(s) => {
-                vec.push((s, sql));
-            },
-            Err(e) => Log::push_error(log, 604, Some(e.to_string())),
-        };
-
+        DB::load_db_cache(db, log, cache);
         vec
+    }
+
+    fn load_db_cache(db: &mut Client, log: Arc<Mutex<Log>>, cache: Arc<Mutex<Cache>>) {
+        let sql = "
+            SELECT url, redirect, permanently FROM redirect
+        ";
+        Cache::del(Arc::clone(&cache), "redirect", Arc::clone(&log));
+        if let DBResult::Ok(res) = DB::exec(db, sql, &[]) {
+            let mut url: String;
+            let mut key: String;
+            let mut redirect: String;
+            let mut permanently: bool;
+            let mut value: String;
+            for row in res {
+                url = row.get(0);
+                key = format!("redirect:{}", &url);
+                redirect = row.get(1);
+                permanently = row.get(2);
+                value = if permanently {
+                    format!("1{}", &redirect)
+                } else {
+                    format!("0{}", &redirect)
+                };
+                Cache::set(Arc::clone(&cache), key, Data::String(value), Arc::clone(&log));
+            }
+        };
+
+        let sql = "
+            SELECT r.url, c.module, c.class, c.action, r.params, r.lang_id
+            FROM route r INNER JOIN controller c ON r.controller_id=c.controller_id
+            WHERE LENGTH(c.module)>0 AND LENGTH(c.class)>0 AND LENGTH(c.action)>0
+        ";
+        Cache::del(Arc::clone(&cache), "route", Arc::clone(&log));
+        if let DBResult::Ok(res) = DB::exec(db, sql, &[]) {
+            let mut url: String;
+            let mut key: String;
+            let mut module: String;
+            let mut class: String;
+            let mut action: String;
+            let mut param: Option<String>;
+            let mut lang_id: Option<i64>;
+            let mut data = Vec::with_capacity(5);
+            for row in res {
+                url = row.get(0);
+                key = format!("route:{}", &url);
+                module = row.get(1);
+                class = row.get(2);
+                action = row.get(3);
+                param = row.get(4);
+                lang_id = row.get(5);
+                data.clear();
+                data.push(Data::String(module));
+                data.push(Data::String(class));
+                data.push(Data::String(action));
+                match &param {
+                    Some(s) => data.push(Data::String(s.clone())),
+                    None => data.push(Data::None),
+                };
+                match &lang_id {
+                    Some(i) => data.push(Data::U64(*i as u64)),
+                    None => data.push(Data::None),
+                };
+                Cache::set(Arc::clone(&cache), key, Data::Vec(data.clone()), Arc::clone(&log));
+            }
+        }
     }
 
 }

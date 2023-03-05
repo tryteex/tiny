@@ -17,7 +17,7 @@ pub struct Config {
     pub rpc_accept: IpAddr,
     pub zone: String,
     pub salt: String,
-    pub lang_id: u8,
+    pub lang_id: u64,
     pub db: DBConfig,
 }
 
@@ -402,7 +402,7 @@ impl Init {
                 };
                 let lang_id = match json.get("lang") {
                     Some(v) => match v.as_i64() {
-                        Some(s) => match u8::try_from(s) {
+                        Some(s) => match u64::try_from(s) {
                             Ok(m) => m,
                             Err(e) => {
                                 Log::push_stop(log, 96, Some(e.to_string()));

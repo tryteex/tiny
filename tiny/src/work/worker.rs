@@ -30,12 +30,12 @@ impl Worker {
         path: String, 
         db: DBConfig, 
         timezone: String, 
-        lang_id: u8, 
+        lang_id: u64, 
         engine: ActMap
     ) -> Worker {
         let tlog = Arc::clone(&log);
         let thread = thread::spawn(move || {
-            let mut db = DB::new(db.clone(), Arc::clone(&log), timezone.clone());
+            let mut db = DB::new(db.clone(), Arc::clone(&log), timezone.clone(), Arc::clone(&cache));
             let html = match RwLock::read(&html) {
                 Ok(h) => h,
                 Err(e) => Log::error(log, e.to_string()),
