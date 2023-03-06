@@ -15,6 +15,7 @@ pub struct LangItem{
 #[derive(Debug, Clone)]
 pub struct Lang {
     pub langs: Vec<LangItem>,
+    pub avaible: Vec<u64>,
     list: HashMap<u64, HashMap<String, HashMap<String, HashMap<String, String>>>>, // lang_id => module => class => text = translate
 }
 
@@ -30,6 +31,10 @@ impl Lang {
         None
     }
 
+    pub fn check(&self, lang_id: u64) -> bool {
+        self.avaible.contains(&lang_id)
+    }
+
     pub fn new(root: &str, db: &DBConfig, log: Arc<Mutex<Log>>) -> Lang {
         let q = "
             SELECT lang_id, name, lang, code
@@ -42,6 +47,7 @@ impl Lang {
                 Log::push_warning(log, 1151, None);
                 return Lang {
                     langs: Vec::new(),
+                    avaible: Vec::new(),
                     list: HashMap::new(),
                 };
             } else {
@@ -51,13 +57,14 @@ impl Lang {
                 Log::push_warning(log, 1150, None);
                 return Lang {
                     langs: Vec::new(),
+                    avaible: Vec::new(),
                     list: HashMap::new(),
                 };
             },
         };
         let mut langs = Vec::with_capacity(res.len());
         let mut ids = HashMap::with_capacity(res.len());
-        
+        let mut avaible = Vec::new();
         for row in res {
             let id = match u64::try_from(row.get::<usize, i64>(0)) {
                 Ok(i) => i,
@@ -65,12 +72,14 @@ impl Lang {
                     Log::push_warning(log, 1152, None);
                     return Lang {
                         langs: Vec::new(),
+                        avaible: Vec::new(),
                         list: HashMap::new(),
                     };
                 },
             };
             let code: String = row.get(3);
             ids.insert(code.clone(), id);
+            avaible.push(id);
             langs.push(LangItem {
                 id,
                 code,
@@ -81,6 +90,7 @@ impl Lang {
 
         let path = format!("{}/app/", root);
         let mut list: HashMap<u64, HashMap<String, HashMap<String, HashMap<String, String>>>> = HashMap::new();
+
         match read_dir(path) {
             Ok(r) => {
                 for entry in r {
@@ -169,6 +179,7 @@ impl Lang {
         }
         Lang {
             list,
+            avaible,
             langs,
         }
     }

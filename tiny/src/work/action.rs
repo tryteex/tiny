@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, hash_map::Entry}, sync::{Mutex, Arc}, io::Write};
+use std::{collections::HashMap, sync::{Mutex, Arc}, io::Write};
 
 use chrono::Local;
 use serde::{Serialize, Deserialize};
@@ -94,14 +94,27 @@ pub struct Response {
 
 #[derive(Debug)]
 pub struct Session<'a> {
-    id: i64,                              // session_id from database
-    pub lang_id: u64,
-    pub user_id: i64,                         // user_id from database
-    pub role_id: i64,                         // role_id from database
+    id: u64,                              // session_id from database
+    lang_id: u64,
+    pub user_id: u64,                         // user_id from database
+    pub role_id: u64,                         // role_id from database
     pub key: &'a str,                           // cookie key
     pub session: String,                      // cookie key
     data: HashMap<String, Data>,     // User data
     change: bool,                         // User data is changed
+}
+
+impl<'a> Session<'a> {
+    pub fn set_lang(&mut self, lang_id: u64) {
+        if self.lang_id != lang_id {
+            self.lang_id = lang_id;
+            self.change = true;
+        }
+    }
+
+    pub fn get_lang(&self) -> u64 {
+        self.lang_id
+    }
 }
 
 pub struct Action<'a> {
@@ -357,30 +370,17 @@ impl<'a> Action<'a> {
         let session_id;
         let session_user_id;
         let session_role_id;
-        let mut session_data;
+        let session_data;
         let session_lang_id;
         let session_change;
 
-        if let Some((sid, uid, rid, sdata)) = Action::load_session(&session_key, ip, agent, data.db) {
+        if let Some((sid, uid, rid, lid, sdata)) = Action::load_session(&session_key, ip, agent, data.db, data.lang_id) {
             session_id = sid;
             session_user_id = uid;
             session_role_id = rid;
             session_data = sdata;
-            session_lang_id = match session_data.entry("lang_id".to_owned()) {
-                Entry::Occupied(mut o) => if let Data::U64(lang_id) = o.get() {
-                    session_change = false;
-                    *lang_id
-                } else {
-                    session_change = true;
-                    *o.get_mut() = Data::U64(data.lang_id);
-                    data.lang_id
-                },
-                Entry::Vacant(v) => {
-                    session_change = true;
-                    v.insert(Data::U64(data.lang_id));
-                    data.lang_id
-                },
-            };
+            session_lang_id = lid;
+            session_change = false;
         } else {
             session_lang_id = data.lang_id;
             session_id = 0;
@@ -466,8 +466,8 @@ impl<'a> Action<'a> {
         self.save_session();
     }
 
-    fn load_session(key: &str, ip: &str, agent: &str, db: &'a mut DB) -> Option<(i64, i64, i64, HashMap<String, Data>)> {
-        let res = match db.query_fast(0, &[&key, &ip, &agent, &key]) {
+    fn load_session(key: &str, ip: &str, agent: &str, db: &'a mut DB, lang_id: u64) -> Option<(u64, u64, u64, u64, HashMap<String, Data>)> {
+        let res = match db.query_fast(0, &[&key, &ip, &agent, &(lang_id as i64), &key]) {
             Some(r) => r,
             None => return None,
         };
@@ -479,6 +479,7 @@ impl<'a> Action<'a> {
         let user_id: i64 = row.get(1);
         let role_id: i64 = row.get(2);
         let data: &[u8] = row.get(3);
+        let lang_id: i64 = row.get(4);
 
         let res = if data.len() == 0 {
             HashMap::new()
@@ -489,7 +490,7 @@ impl<'a> Action<'a> {
             }
         };
 
-        Some((session_id, user_id, role_id, res))
+        Some((session_id as u64, user_id as u64, role_id as u64, lang_id as u64, res))
     }
 
     fn save_session(&mut self) {
@@ -499,9 +500,9 @@ impl<'a> Action<'a> {
                     Ok(r) => r,
                     Err(_) => Vec::new(),
                 };
-                self.db.query_fast(1, &[&self.session.user_id, &data, &self.request.ip, &self.request.agent, &self.session.id]);
+                self.db.query_fast(1, &[&(self.session.user_id as i64), &data, &self.request.ip, &self.request.agent, &(self.session.lang_id as i64), &(self.session.id as i64)]);
             } else {
-                self.db.query_fast(2, &[&self.session.id]);
+                self.db.query_fast(2, &[&(self.session.id as i64)]);
             }
         }
     }
@@ -516,9 +517,6 @@ impl<'a> Action<'a> {
     }
 
     pub fn get_access(&mut self, module: &str, class: &str, action: &str) -> bool {
-        if module == "index" && class == "index" && action == "err" {
-            return true;
-        }
         let key = format!("auth:{}:{}:{}:{}", self.session.role_id, module, class, action);
         if let Some(data) = Cache::get(Arc::clone(&self.cache), &key, Arc::clone(&self.log)) {
             if let Data::Bool(a) = data {
@@ -526,7 +524,7 @@ impl<'a> Action<'a> {
             }
         };
         // Prepare sql query
-        match self.db.query_fast(3, &[&self.session.user_id, &module, &module, &class, &module, &class, &action]) {
+        match self.db.query_fast(3, &[&(self.session.user_id as i64), &module, &module, &module, &class, &class, &action]) {
             Some(rows) => {
                 if rows.len() == 1 {
                     let access: bool = rows[0].get(0);
@@ -554,11 +552,23 @@ impl<'a> Action<'a> {
         if let Some(lang_id) = lang_id {
             if self.session.lang_id != lang_id {
                 self.session.change = true;
-                self.session.data.insert("lang_id".to_owned(), Data::U64(lang_id));
                 self.session.lang_id = lang_id;
             }
         }
         self.start_route(&module, &class, &action, param, false)
+    }
+
+    pub fn not_found(&self) -> String {
+        if let Some(data) = Cache::get(Arc::clone(&self.cache), &format!("404:{}", self.session.lang_id), Arc::clone(&self.log)) {
+            if let Data::String(url) = data {
+                return url;
+            }
+        } else if let Some(data) = Cache::get(Arc::clone(&self.cache), "404", Arc::clone(&self.log)) {
+            if let Data::String(url) = data {
+                return url;
+            }
+        };
+        "/index/index/not_found".to_owned()
     }
 
     fn start_route(&mut self, module: &str, class: &str, action: &str, param: Option<String>, internal: bool) -> Answer {
@@ -569,7 +579,7 @@ impl<'a> Action<'a> {
             return Answer::None;
         }
         if !(module == "index" && class == "index" && action == "not_found") {
-            self.response.redirect = Some(Redirect { url: "/index/index/not_found".to_owned(), permanently: false});
+            self.response.redirect = Some(Redirect { url: self.not_found(), permanently: false});
         }
          Answer::None
     }

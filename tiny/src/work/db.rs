@@ -257,25 +257,25 @@ impl DB {
         let sql = "
             WITH 
             new_q AS (
-                SELECT 0::int8 user_id, $1::text session, '\\x'::bytea data, now() created, now() last, $2 ip, $3 user_agent
+                SELECT 0::int8 user_id, $1::text session, '\\x'::bytea data, now() created, now() last, $2 ip, $3 user_agent, $4 lang_id
             ),
             ins_q AS (
-                INSERT INTO session (user_id, session, data, created, last, ip, user_agent) 
-                SELECT n.user_id, n.session, n.data, n.created, n.last, n.ip, n.user_agent
+                INSERT INTO session (user_id, session, data, created, last, ip, user_agent, lang_id) 
+                SELECT n.user_id, n.session, n.data, n.created, n.last, n.ip, n.user_agent, n.lang_id
                 FROM 
                 new_q n
                 LEFT JOIN session s ON s.session=n.session
                 WHERE s.session_id IS NULL
-                RETURNING session_id, data, user_id
+                RETURNING session_id, data, user_id, lang_id
             ),
             res AS (
-                SELECT session_id, data, user_id FROM ins_q
+                SELECT session_id, data, user_id, lang_id FROM ins_q
                 UNION 
-                SELECT session_id, data, user_id FROM session WHERE session=$4
+                SELECT session_id, data, user_id, lang_id FROM session WHERE session=$5
             )
-            SELECT r.session_id, r.user_id, u.role_id, r.data FROM res r INNER JOIN \"user\" u ON u.user_id=r.user_id
+            SELECT r.session_id, r.user_id, u.role_id, r.data, r.lang_id FROM res r INNER JOIN \"user\" u ON u.user_id=r.user_id
         ";
-        match db.prepare_typed(sql, &[Type::TEXT, Type::TEXT, Type::TEXT, Type::TEXT]) {
+        match db.prepare_typed(sql, &[Type::TEXT, Type::TEXT, Type::TEXT, Type::INT8, Type::TEXT]) {
             Ok(s) => {
                 vec.push((s, sql));
             },
@@ -290,11 +290,12 @@ impl DB {
                 data=$2,
                 last=now(),
                 ip=$3,
-                user_agent=$4
+                user_agent=$4,
+                lang_id=$5
             WHERE
-                session_id=$5
+                session_id=$6
         ";
-        match db.prepare_typed(sql, &[Type::INT8, Type::BYTEA, Type::TEXT, Type::TEXT, Type::INT8]) {
+        match db.prepare_typed(sql, &[Type::INT8, Type::BYTEA, Type::TEXT, Type::TEXT, Type::INT8, Type::INT8]) {
             Ok(s) => {
                 vec.push((s, sql));
             },
@@ -327,8 +328,8 @@ impl DB {
                 a.access AND u.user_id=$1 AND (
                     (c.module='' AND c.class='' AND c.action='')
                     OR (c.module=$2 AND c.class='' AND c.action='')
-                    OR (c.module=$3 AND c.class=$4 AND c.action='')
-                    OR (c.module=$5 AND c.class=$6 AND c.action=$7)
+                    OR (c.module=$3 AND c.class=$5 AND c.action='')
+                    OR (c.module=$4 AND c.class=$6 AND c.action=$7)
                 )
         ";
         match db.prepare_typed(sql, &[Type::INT8, Type::TEXT, Type::TEXT, Type::TEXT, Type::TEXT, Type::TEXT, Type::TEXT]) {
@@ -373,6 +374,7 @@ impl DB {
             WHERE LENGTH(c.module)>0 AND LENGTH(c.class)>0 AND LENGTH(c.action)>0
         ";
         Cache::del(Arc::clone(&cache), "route", Arc::clone(&log));
+        Cache::del(Arc::clone(&cache), "404", Arc::clone(&log));
         if let DBResult::Ok(res) = DB::exec(db, sql, &[]) {
             let mut url: String;
             let mut key: String;
@@ -382,6 +384,7 @@ impl DB {
             let mut param: Option<String>;
             let mut lang_id: Option<i64>;
             let mut data = Vec::with_capacity(5);
+
             for row in res {
                 url = row.get(0);
                 key = format!("route:{}", &url);
@@ -391,6 +394,12 @@ impl DB {
                 param = row.get(4);
                 lang_id = row.get(5);
                 data.clear();
+                if &module == "index" && &class == "index" && action == "not_found" {
+                    match &lang_id {
+                        Some(i) => Cache::set(Arc::clone(&cache), format!("404:{}", *i), Data::String(url), Arc::clone(&log)),
+                        None => Cache::set(Arc::clone(&cache), "404".to_owned(), Data::String(url), Arc::clone(&log)),
+                    };
+                }
                 data.push(Data::String(module));
                 data.push(Data::String(class));
                 data.push(Data::String(action));
@@ -402,6 +411,7 @@ impl DB {
                     Some(i) => data.push(Data::U64(*i as u64)),
                     None => data.push(Data::None),
                 };
+
                 Cache::set(Arc::clone(&cache), key, Data::Vec(data.clone()), Arc::clone(&log));
             }
         }

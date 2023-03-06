@@ -23,7 +23,7 @@
           </li>
           <li class="nav-item"> <a class="nav-link" href="/contact.html">{%+ contact %}</a></li>
           <li class="nav-item dropdown"> <a class="nav-link dropdown-toggle" href="#" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">{%+ language %}</a>
-            <div class="dropdown-menu">
+            <div class="dropdown-menu" id="set-lang">
               {%@ langs %}
               <a class="dropdown-item" data-id="{% langs.id %}">{%+ langs.name %}</a>
               {%@%}
@@ -34,3 +34,22 @@
     </nav>
   </div>
 </header>
+<script>
+    window.addEventListener('DOMContentLoaded', (event) => {
+        document.getElementById('set-lang').addEventListener("click", async (event) => {
+            let e = event.target;
+            if(e.tagName == 'A') {
+                let id = e.getAttribute('data-id');
+                if(id != null) {
+                    try {
+                        const res = await fetch('/index/index/lang/'+id, {headers: { 'X-Requested-With': 'xmlHttpRequest'} });
+                        const text = await res.text();
+                        if(text == 'ok') {
+                            location.href = location.href;
+                        }
+                    } catch (err) {}
+                }
+            }
+        });
+    });
+</script>

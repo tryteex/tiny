@@ -10,7 +10,7 @@ pub fn index(this: &mut Action) -> Answer {
 
     this.data.insert("title", Data::String(this.lang("title")));
     this.data.insert("description", Data::String(this.lang("description")));
-    this.data.insert("lang", Data::String(this.language.langs[this.session.lang_id as usize].lang.clone()));
+    this.data.insert("lang", Data::String(this.language.langs[this.session.get_lang() as usize].lang.clone()));
 
     this.load("header", "index", "main", "header", None);
     this.load("footer", "index", "main", "footer", None);
@@ -49,7 +49,7 @@ pub fn navigation(this: &mut Action) -> Answer {
     this.data.insert("lifestyle", Data::String(this.lang("lifestyle")));
     this.data.insert("contact", Data::String(this.lang("contact")));
 
-    this.data.insert("language", Data::String(this.language.langs[this.session.lang_id as usize].name.clone()));
+    this.data.insert("language", Data::String(this.language.langs[this.session.get_lang() as usize].name.clone()));
 
     let mut langs = Vec::with_capacity(this.language.langs.len());
     for lang in &this.language.langs {
@@ -76,13 +76,11 @@ pub fn not_found(this: &mut Action) -> Answer {
         this.response.redirect = Some(Redirect { url: "/".to_owned(), permanently: true });
         return Answer::None;
     }
-    Html::render("not_found", &this)
-}
-
-pub fn err(this: &mut Action) -> Answer {
-    if !this.internal {
-        this.response.redirect = Some(Redirect { url: "/".to_owned(), permanently: true });
-        return Answer::None;
+    if this.request.ajax {
+        return Answer::String("404".to_owned());
     }
-    Html::render("err", &this)
+    this.load("header", "index", "main", "header", None);
+    this.load("footer", "index", "main", "footer", None);
+    this.response.http_code = Some(404);
+    Html::render("404", &this)
 }
