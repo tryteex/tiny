@@ -77,13 +77,13 @@ impl Lang {
                     };
                 },
             };
-            let code: String = row.get(3);
+            let code: String = row.get(2);
             ids.insert(code.clone(), id);
             avaible.push(id);
             langs.push(LangItem {
                 id,
-                code,
-                lang: row.get(2),
+                code: row.get(3),
+                lang: code,
                 name: row.get(1),
             });
         }
@@ -113,7 +113,7 @@ impl Lang {
                                                                         if path.is_file() {
                                                                             if let Some(v) = path.file_name() {
                                                                                 if let Some(lang) = v.to_str() {
-                                                                                    if lang.ends_with(".lang") && lang.len() > 5 {
+                                                                                    if lang.ends_with(".lang") && lang.len() == 7 {
                                                                                         if let Some(id) = ids.get(&lang[..lang.len()-5]) {
                                                                                             if let Ok(str) = read_to_string(&path) {
                                                                                                 for line in str.lines() {

@@ -78,13 +78,15 @@ INSERT INTO "public"."route" VALUES (3, '/about.html', 4, 'about', NULL);
 INSERT INTO "public"."route" VALUES (4, '/travel.html', 4, 'travel', NULL);
 INSERT INTO "public"."route" VALUES (5, '/article.html', 4, 'article', NULL);
 INSERT INTO "public"."route" VALUES (6, '/contact.html', 4, 'contact', NULL);
+INSERT INTO "public"."route" VALUES (7, '/terms.html', 4, 'contact', NULL);
+INSERT INTO "public"."route" VALUES (8, '/policy.html', 4, 'contact', NULL);
 INSERT INTO "public"."user" VALUES (0, 't', 0, '2023-01-01 00:00:00+02', 't', 0);
 
 SELECT setval('"public"."access_access_id_seq"', 1, true);
 SELECT setval('"public"."controller_controller_id_seq"', 4, true);
 SELECT setval('"public"."lang_lang_id_seq"', 1, true);
 SELECT setval('"public"."role_role_id_seq"', 2, true);
-SELECT setval('"public"."route_route_id_seq"', 6, true);
+SELECT setval('"public"."route_route_id_seq"', 8, true);
 
 CREATE INDEX "access_access_idx" ON "public"."access" USING btree (
   "access" "pg_catalog"."bool_ops" ASC NULLS LAST

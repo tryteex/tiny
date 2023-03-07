@@ -2,6 +2,16 @@ use std::collections::HashMap;
 
 use crate::work::{action::{Action, Answer, Data, Redirect}, html::Html};
 
+pub fn breadcrumbs(this: &mut Action) -> Answer {
+    if !this.internal {
+        this.response.redirect = Some(Redirect { url: "/".to_owned(), permanently: true });
+        return Answer::None;
+    }
+
+    this.data.insert("home", Data::String(this.lang("home")));
+    Html::render("breadcrumbs", &this)
+}
+
 pub fn index(this: &mut Action) -> Answer {
     if !this.internal {
         this.response.redirect = Some(Redirect { url: "/".to_owned(), permanently: true });
@@ -79,6 +89,8 @@ pub fn not_found(this: &mut Action) -> Answer {
     if this.request.ajax {
         return Answer::String("404".to_owned());
     }
+    this.data.insert("home", Data::String(this.lang("home")));
+    this.data.insert("not_found", Data::String(this.lang("not_found")));
     this.load("header", "index", "main", "header", None);
     this.load("footer", "index", "main", "footer", None);
     this.response.http_code = Some(404);

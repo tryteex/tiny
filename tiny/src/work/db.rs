@@ -339,6 +339,21 @@ impl DB {
             Err(e) => Log::push_error(log, 604, Some(e.to_string())),
         };
 
+        // 4 Get url by route map
+        let sql = "
+            SELECT r.url
+            FROM 
+                route r
+                INNER JOIN controller c ON c.controller_id=r.controller_id
+            WHERE c.module=$1 AND c.class=$2 AND c.action=$3 AND COALESCE(r.params, '')=$4 AND COALESCE(r.lang_id, -1)=$5
+        ";
+        match db.prepare_typed(sql, &[Type::TEXT, Type::TEXT, Type::TEXT, Type::TEXT, Type::INT8]) {
+            Ok(s) => {
+                vec.push((s, sql));
+            },
+            Err(e) => Log::push_error(log, 604, Some(e.to_string())),
+        };
+
         DB::load_db_cache(db, log, cache);
         vec
     }

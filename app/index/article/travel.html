@@ -3,11 +3,8 @@
 		<div class="container">
 			<div class="row">
 				<div class="col-12">
-					<div class="breadcrumbs mb-4"> <a href="index.html">{% home %}</a>
-						<span class="mx-1">/</span>  <a href="/article.html">{% article %}</a>
-						<span class="mx-1">/</span>  <a href="travel.html">{% travel %}</a>
-					</div>
-					<h1 class="mb-4 border-bottom border-primary d-inline-block">{% travel %}</h1>
+					{% breadcrumbs %}
+					<h1 class="mb-4 border-bottom border-primary d-inline-block">{%+ article %}</h1>
 				</div>
 				<div class="col-lg-8 mb-5 mb-lg-0">
 					<div class="row">
@@ -72,8 +69,7 @@
 											<a href="#!">news</a>
 										</li>
 									</ul>
-									<h2><a class="post-title" href="/article.html">Eight
-                        Awesome Places to Visit in Montana This Summer</a></h2>
+									<h2><a class="post-title" href="/article.html">Eight Awesome Places to Visit in Montana This Summer</a></h2>
 									<p class="card-text">Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna …</p>
 									<div class="content"> <a class="read-more-btn" href="/articles/travel/post-3/">Read Full Article</a>
 									</div>

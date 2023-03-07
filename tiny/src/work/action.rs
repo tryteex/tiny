@@ -558,6 +558,24 @@ impl<'a> Action<'a> {
         self.start_route(&module, &class, &action, param, false)
     }
 
+    pub fn route(&mut self, module: &str, class: &str, action: &str, param: Option<&str>, lang_id: Option<u64>) -> String {
+        let p = match param {
+            Some(s) => s,
+            None => "",
+        };
+        let id = match lang_id {
+            Some(id) => id as i64,
+            None => -1,
+        };
+        if let Some(v) = self.db.query_fast(4, &[&module, &class, &action, &p, &id]) {
+            if let Some(r) = v.get(0) {
+                let url: String = r.get(0);
+                return url;
+            };
+        };
+        format!("/{}/{}/{}/{}", module, class, action, p)
+    }
+
     pub fn not_found(&self) -> String {
         if let Some(data) = Cache::get(Arc::clone(&self.cache), &format!("404:{}", self.session.lang_id), Arc::clone(&self.log)) {
             if let Data::String(url) = data {
