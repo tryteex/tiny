@@ -10,7 +10,6 @@ pub enum Node {
     Value(String),
     ValueDeEscape(String),
     ValueEscape(String),
-    Url(String),
     If(String, Vec<Node>, Vec<Node>),
     Loop(String, Vec<Node>),
 }
@@ -19,7 +18,6 @@ enum TypeNode<'a> {
     Value(&'a str),
     ValueDeEscape(&'a str),
     ValueEscape(&'a str),
-    Url(&'a str),
     If(&'a str),
     Else,
     EndIf,
@@ -47,7 +45,6 @@ impl Html {
     // {% str %} - unescaped output
     // {%+ str %} - escaped output
     // {%- str %} - de-escaped output
-    // {%= str %} - url escaped output
     // {%# comment %} - comment
     // {%? bool %} - if
     // {%?~%} - else
@@ -72,7 +69,6 @@ impl Html {
                                 TypeNode::Value(name) => vec.push(Node::Value(name.to_owned())),
                                 TypeNode::ValueDeEscape(name) => vec.push(Node::ValueDeEscape(name.to_owned())),
                                 TypeNode::ValueEscape(name) => vec.push(Node::ValueEscape(name.to_owned())),
-                                TypeNode::Url(name) => vec.push(Node::Url(name.to_owned())),
                                 TypeNode::If(name) => {
                                     let mut vt = Vec::new();
                                     let mut vf = Vec::new();
@@ -168,9 +164,6 @@ impl Html {
         };
         if &text[2..4] == "+ " && &text[len-3..len-2] == " " {
             return TypeNode::ValueEscape(&text[4..len-3]);
-        };
-        if &text[2..4] == "= " && &text[len-3..len-2] == " " {
-            return TypeNode::Url(&text[4..len-3]);
         };
         if &text[2..4] == "# " && &text[len-3..len-2] == " " {
             return TypeNode::Comment;
@@ -322,17 +315,6 @@ impl Html {
                             Data::F64(v) => render.push(v.to_string()),
                             Data::String(v) => render.push(Html::escape(v)),
                             _ => {},
-                        }
-                    }
-                },
-                Node::Url(key) => if let Some(val) = data.get(key as &str) {
-                    if let Data::String(v) = val {
-                        render.push(Html::escape(v))
-                    }
-                } else if let Some(a) = add {
-                    if let Some(val) = a.get(key as &str) {
-                        if let Data::String(v) = val {
-                            render.push(Html::escape(v))
                         }
                     }
                 },
